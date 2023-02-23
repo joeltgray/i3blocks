@@ -1,0 +1,98 @@
+#! /usr/bin/python
+
+import os
+import re
+import sys
+
+COLOR_NORMAL = "#5FFF5F"
+COLOR_WARN = "#FFFC00"
+COLOR_CRIT = "#FF0000"
+
+
+def main():
+    stream = os.popen('free --kilo')
+    memory_data = stream.read()
+    '''
+    Example memory_data:
+                    total        used        free      shared  buff/cache   available
+        Mem:           33555        3427       27055         155        3072       29531
+        Swap:           4294           0        4294
+    '''
+    res = format_data(memory_data)
+    output, usage = selected_data(res)
+    print(colorised(output, usage))
+    
+    return
+
+def selected_data(data):
+    #change this depending on what data you wish to return
+    memory_usage = '{}/{}G'
+    used = kb_to_gb(data['mem']['used'])
+    total = kb_to_gb(data['mem']['total'])
+    percentage_used = (used/total) * 100
+    return memory_usage.format(used, total), percentage_used
+    '''
+    Example memory_usage:
+        "12.4/32.5G"
+    '''
+
+def format_data(memory_data):
+    memory_dict = {}
+    rows = memory_data.strip().split('\n')
+    headers = rows[0].split()
+    data_rows = rows[1:]
+
+    for row in data_rows:
+        parsed_row = row.split()
+        dict_key = format_keys(parsed_row[0])
+        memory_dict[dict_key] = {}
+        parsed_row.pop(0)   #remove memory type key from, list leaving just data
+
+        # Map keys to values and set excess keys to None
+        memory_dict[dict_key] = {key: int(value) for key, value in zip(headers, parsed_row)}
+    return memory_dict
+    '''
+        {
+        'mem': {
+            'total': 33555120,
+            'used': 3595030,
+            'free': 26826674,
+            'shared': 176934,
+            'buff/cache': 3133415,
+            'available': 29340925
+        },
+        'swap': {
+            'total': 4294963,
+            'used': 0,
+            'free': 4294963
+        }
+        }
+    '''
+    
+def format_keys(key: str) -> str:
+    #substitute non alpha characters with empty string and make lowercase
+    return re.sub(r'[^a-zA-Z]', '', key).lower()
+
+def kb_to_gb(kilobytes):
+    return round(kilobytes / (1024*1024), 2)
+
+def colorised(data, usage):
+    COLOR = None
+    if usage >= 70:
+        COLOR = COLOR_CRIT
+    elif usage >= 40:
+        COLOR = COLOR_WARN
+    else:
+        COLOR = COLOR_NORMAL
+
+    #check to see if script it being called by i3blocks with i3blocks flag
+    if len(sys.argv) > 1 and sys.argv[1] == "i3blocks":
+        return f'<span foreground="{COLOR}">{data}</span>'
+    else:
+        #convert HEX to rgb
+        r, g, b = tuple(int(COLOR[i:i+2], 16) for i in (1, 3, 5))
+        return f"\x1b[38;2;{r};{g};{b}m{data}\x1b[0m"
+    
+
+if __name__ == "__main__":
+    main()
